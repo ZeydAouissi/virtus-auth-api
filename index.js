@@ -35,7 +35,7 @@ app.get("/api/ping", (req, res) => {
 // "banned" -> البرنامج تم إيقافه تماماً كإجراء طوارئ صارم.
 app.get('/api/update', (req, res) => {
     res.json({
-        status: "banned", 
+        status: "kill", // قمنا بتغييرها من banned إلى kill لمنع تداخل الزر
         latest_version: "v2.4.0-S",
         download_url: "https://discord.gg/vMCAY24n"
     });
