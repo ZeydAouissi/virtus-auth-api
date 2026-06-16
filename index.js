@@ -29,7 +29,7 @@ async function saveWhitelist(whitelistObj) {
     }
 }
 
-// Handling HWID Authentication requests from C++
+// API AUTH
 app.post('/api/auth', async (req, res) => { 
     const { hwid, username } = req.body; 
     
@@ -46,12 +46,22 @@ app.post('/api/auth', async (req, res) => {
             username: username || "Unknown User",
             status: "pending"
         };
+
         await saveWhitelist(whitelist); 
 
         const channel = client.channels.cache.get(process.env.DISCORD_CHANNEL_ID);
+
         if (channel) {
-            const approveButton = new ButtonBuilder().setCustomId(`approve_${hwid}`).setLabel('Approve ✅').setStyle(ButtonStyle.Success);
-            const denyButton = new ButtonBuilder().setCustomId(`deny_${hwid}`).setLabel('Deny ❌').setStyle(ButtonStyle.Danger);
+            const approveButton = new ButtonBuilder()
+                .setCustomId(`approve_${hwid}`)
+                .setLabel('Approve ✅')
+                .setStyle(ButtonStyle.Success);
+
+            const denyButton = new ButtonBuilder()
+                .setCustomId(`deny_${hwid}`)
+                .setLabel('Deny ❌')
+                .setStyle(ButtonStyle.Danger);
+
             const row = new ActionRowBuilder().addComponents(approveButton, denyButton);
 
             await channel.send({
@@ -60,45 +70,75 @@ app.post('/api/auth', async (req, res) => {
             });
         }
     }
+
     return res.json({ status: "pending" });
 });
 
-// Handling Button Interactions
+// BUTTON HANDLER
 client.on('interactionCreate', async (interaction) => {
     if (!interaction.isButton()) return;
-    if (interaction.user.id !== '228898892425592832') return interaction.reply({ content: "Unauthorized.", ephemeral: true });
+
+    if (interaction.user.id !== '228898892425592832') {
+        return interaction.reply({ content: "Unauthorized.", ephemeral: true });
+    }
 
     const [action, hwid] = interaction.customId.split('_');
     let whitelist = await getWhitelist();
 
-    if (action === 'approve') {
-        if (whitelist[hwid]) {
-            whitelist[hwid].status = "approved";
-            await saveWhitelist(whitelist);
-            
-            // تحديث الرسالة ليبقى زر "Revoke" دائم
-            const revokeButton = new ButtonBuilder().setCustomId(`deny_${hwid}`).setLabel('Revoke Access ❌').setStyle(ButtonStyle.Danger);
-            const row = new ActionRowBuilder().addComponents(revokeButton);
+    if (!whitelist[hwid]) {
+        return interaction.reply({ content: "Data not found.", ephemeral: true });
+    }
 
-            await interaction.update({
-                content: `✅ **Approved:** ${whitelist[hwid].username}\nHWID: \`${hwid}\`\n*Approved by ${interaction.user.username}*`,
-                components: [row]
-            });
-        }
-    } else if (action === 'deny') {
-        if (whitelist[hwid]) {
-            delete whitelist[hwid];
-            await saveWhitelist(whitelist);
-            await interaction.update({
-                content: `❌ **Access Revoked/Denied:** \`${hwid}\`\n*Processed by ${interaction.user.username}*`,
-                components: []
-            });
-        } else {
-            await interaction.reply({ content: "Data not found.", ephemeral: true });
-        }
+    // ✅ APPROVE
+    if (action === 'approve') {
+
+        whitelist[hwid].status = "approved";
+        await saveWhitelist(whitelist);
+
+        const revokeButton = new ButtonBuilder()
+            .setCustomId(`revoke_${hwid}`)
+            .setLabel('Revoke Access ❌')
+            .setStyle(ButtonStyle.Danger);
+
+        const row = new ActionRowBuilder().addComponents(revokeButton);
+
+        await interaction.update({
+            content: `✅ **Approved:** ${whitelist[hwid].username}\nHWID: \`${hwid}\`\n*Approved by ${interaction.user.username}*`,
+            components: [row] // 🔥 يبقى زر الحذف فقط
+        });
+    }
+
+    // ❌ DENY (قبل القبول)
+    else if (action === 'deny') {
+
+        delete whitelist[hwid];
+        await saveWhitelist(whitelist);
+
+        await interaction.update({
+            content: `❌ **Denied:** \`${hwid}\`\n*By ${interaction.user.username}*`,
+            components: []
+        });
+    }
+
+    // 🔥 REVOKE (بعد القبول)
+    else if (action === 'revoke') {
+
+        delete whitelist[hwid];
+        await saveWhitelist(whitelist);
+
+        await interaction.update({
+            content: `🚫 **Access Revoked:** \`${hwid}\`\n*By ${interaction.user.username}*`,
+            components: []
+        });
     }
 });
 
-client.on('ready', () => console.log(`Bot logged in as ${client.user.tag}`));
+client.on('ready', () => {
+    console.log(`Bot logged in as ${client.user.tag}`);
+});
+
 client.login(process.env.BOT_TOKEN);
-app.listen(process.env.PORT || 3000, () => console.log('Server is running.'));
+
+app.listen(process.env.PORT || 3000, () => {
+    console.log('Server is running.');
+});
