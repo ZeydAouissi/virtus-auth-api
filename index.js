@@ -152,3 +152,118 @@ client.on('interactionCreate', async (interaction) => {
         // الرد في الروم الرئيسية بحذفه بعد 10 ثوانٍ
         await interaction.editReply({ content: `✅ Your ticket has been opened here: <#${ticketChannel.id}>` });
         setTimeout(() => interaction.deleteReply().catch(() => {}), 10000);
+        return;
+    }
+
+    // 3️⃣ معالجة أزرار الإدارة والتحكم
+    if (interaction.isButton()) {
+        const [action, hwid] = interaction.customId.split('_');
+
+        // زر إغلاق التيكيت
+        if (action === 'close') {
+            if (interaction.user.id !== ADMIN_ID) {
+                await interaction.reply({ content: "❌ Strictly restricted to administrators." });
+                setTimeout(() => interaction.deleteReply().catch(() => {}), 10000);
+                return;
+            }
+            await interaction.reply({ content: "This ticket will be deleted in 5 seconds..." });
+            setTimeout(() => interaction.channel.delete().catch(() => {}), 5000);
+            return;
+        }
+
+        // أزرار التحكم بالحساب والـ HWID
+        if (['approve', 'deny', 'ban', 'revoke'].includes(action)) {
+            if (interaction.user.id !== ADMIN_ID) {
+                await interaction.reply({ content: "❌ **Access Denied:** Admin privileges required." });
+                setTimeout(() => interaction.deleteReply().catch(() => {}), 10000);
+                return;
+            }
+
+            let whitelist = await getWhitelist();
+            if (!whitelist[hwid]) {
+                await interaction.reply({ content: "⚠️ User data not found in database." });
+                setTimeout(() => interaction.deleteReply().catch(() => {}), 10000);
+                return;
+            }
+
+            const targetUser = whitelist[hwid].username;
+
+            if (action === 'approve') {
+                whitelist[hwid].status = "approved";
+                await saveWhitelist(whitelist);
+
+                const revokeButton = new ButtonBuilder().setCustomId(`revoke_${hwid}`).setLabel('Revoke Access ❌').setStyle(ButtonStyle.Danger);
+                const closeButton = new ButtonBuilder().setCustomId('close_ticket').setLabel('Close Ticket 🔒').setStyle(ButtonStyle.Primary);
+
+                await interaction.update({
+                    content: `✅ **Approved Successfully!**\n👤 User: \`${targetUser}\`\n🆔 HWID: \`${hwid}\`\n👮 Approved By: <@${interaction.user.id}>`,
+                    components: [new ActionRowBuilder().addComponents(revokeButton, closeButton)]
+                });
+            } 
+            
+            else if (action === 'deny') {
+                delete whitelist[hwid];
+                await saveWhitelist(whitelist);
+                
+                const closeButton = new ButtonBuilder().setCustomId('close_ticket').setLabel('Close Ticket 🔒').setStyle(ButtonStyle.Primary);
+                await interaction.update({
+                    content: `❌ **Request Denied**\n👤 User: \`${targetUser}\`\n🆔 HWID: \`${hwid}\`\n👮 Denied By: <@${interaction.user.id}>`,
+                    components: [new ActionRowBuilder().addComponents(closeButton)]
+                });
+            } 
+            
+            else if (action === 'revoke') {
+                delete whitelist[hwid];
+                await saveWhitelist(whitelist);
+
+                const closeButton = new ButtonBuilder().setCustomId('close_ticket').setLabel('Close Ticket 🔒').setStyle(ButtonStyle.Primary);
+                await interaction.update({
+                    content: `🚫 **Access Revoked**\n👤 User: \`${targetUser}\`\n🆔 HWID: \`${hwid}\`\n👮 Revoked By: <@${interaction.user.id}>`,
+                    components: [new ActionRowBuilder().addComponents(closeButton)]
+                });
+            } 
+            
+            else if (action === 'ban') {
+                whitelist[hwid].status = "banned";
+                await saveWhitelist(whitelist);
+
+                const closeButton = new ButtonBuilder().setCustomId('close_ticket').setLabel('Close Ticket 🔒').setStyle(ButtonStyle.Primary);
+                await interaction.update({
+                    content: `🔨 **HWID Permanently Banned**\n👤 User: \`${targetUser}\`\n🆔 HWID: \`${hwid}\`\n👮 Banned By: <@${interaction.user.id}>`,
+                    components: [new ActionRowBuilder().addComponents(closeButton)]
+                });
+            }
+        }
+    }
+});
+
+// ================= SETUP COMMAND =================
+client.on('messageCreate', async (message) => {
+    if (message.content === '!setup' && message.author.id === ADMIN_ID) {
+        const setupButton = new ButtonBuilder()
+            .setCustomId('create_whitelist_ticket')
+            .setLabel('Create Ticket 🎫')
+            .setStyle(ButtonStyle.Success);
+
+        const row = new ActionRowBuilder().addComponents(setupButton);
+
+        await message.channel.send({
+            content: '📌 **Whitelist & Device Registration**\n\nClick the button below to open a ticket and automatically link your Discord profile with your device HWID.',
+            components: [row]
+        });
+        
+        await message.delete().catch(() => {});
+    }
+});
+
+// ================= BOT READY =================
+client.on('ready', () => {
+    console.log(`Bot logged in as ${client.user.tag}`);
+});
+
+client.login(process.env.BOT_TOKEN);
+
+// ================= SERVER =================
+app.listen(process.env.PORT || 3000, () => {
+    console.log('Server is running.');
+});
