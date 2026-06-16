@@ -34,8 +34,9 @@ app.get("/api/ping", (req, res) => {
 // "maintenance" -> البرنامج يظهر رسالة صيانة ويغلق نفسه فوراً.
 // "banned" -> البرنامج تم إيقافه تماماً كإجراء طوارئ صارم.
 app.get('/api/update', (req, res) => {
-    res.json({
-        status: "kill", // قمنا بتغييرها من banned إلى kill لمنع تداخل الزر
+    // إرجاع كود 200 صريح مع كتابة الكلمة المفتاحية banned بشكل واضح لمنع الـ Connection Error
+    res.status(200).json({
+        status: "banned", 
         latest_version: "v2.4.0-S",
         download_url: "https://discord.gg/vMCAY24n"
     });
