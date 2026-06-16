@@ -190,10 +190,11 @@ client.on('interactionCreate', async (interaction) => {
                     components: [new ActionRowBuilder().addComponents(revokeButton, closeButton)]
                 });
 
+                // إرسال الإشعار والمنشن إلى روم الأعضاء المقبولين بدون عرض الـ HWID
                 const logChannel = interaction.guild.channels.cache.get(LOG_CHANNEL_ID);
                 if (logChannel) {
                     await logChannel.send({
-                        content: `👑 **New User Whitelisted!**\n👤 Member: <@${targetId}>\n🔑 HWID: \`${hwid}\`\n✅ النظام جاهز للاستخدام الآن.`
+                        content: `🎉 **تم التفعيل بنجاح!**\nأهلاً بك <@${targetId}> في عائلة VIRTUS. نتمنى لك تجربة ممتعة! 👑`
                     });
                 }
             } 
