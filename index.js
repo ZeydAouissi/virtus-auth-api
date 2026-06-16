@@ -29,30 +29,21 @@ async function saveWhitelist(whitelistObj) {
     }
 }
 
-// ================= API AUTH =================
+// API AUTH
 app.post('/api/auth', async (req, res) => { 
-    const { hwid, username, discordId } = req.body; 
+    const { hwid, username } = req.body; 
     
-    if (!hwid || !discordId) {
-        return res.status(400).json({ error: "HWID & Discord ID required" });
-    }
+    if (!hwid) return res.status(400).json({ error: "HWID is required" });
 
     let whitelist = await getWhitelist(); 
 
-    // ✅ تحقق كامل
-    if (
-        whitelist[hwid] &&
-        whitelist[hwid].status === "approved" &&
-        whitelist[hwid].discordId === discordId
-    ) {
+    if (whitelist[hwid] && whitelist[hwid].status === "approved") {
         return res.json({ status: "approved" });
     }
 
-    // ⏳ طلب جديد
     if (!whitelist[hwid]) {
         whitelist[hwid] = {
             username: username || "Unknown User",
-            discordId: discordId,
             status: "pending"
         };
 
@@ -74,11 +65,7 @@ app.post('/api/auth', async (req, res) => {
             const row = new ActionRowBuilder().addComponents(approveButton, denyButton);
 
             await channel.send({
-                content:
-`📩 **New Auth Request!**
-👤 User: \`${username}\`
-💬 Discord ID: \`${discordId}\`
-🆔 HWID: \`${hwid}\``,
+                content: `📩 **New Auth Request!**\n👤 User: \`${username || "Unknown User"}\`\n🆔 HWID: \`${hwid}\``,
                 components: [row]
             });
         }
@@ -87,7 +74,7 @@ app.post('/api/auth', async (req, res) => {
     return res.json({ status: "pending" });
 });
 
-// ================= BUTTON HANDLER =================
+// BUTTON HANDLER
 client.on('interactionCreate', async (interaction) => {
     if (!interaction.isButton()) return;
 
@@ -103,7 +90,6 @@ client.on('interactionCreate', async (interaction) => {
     }
 
     const username = whitelist[hwid].username || "Unknown User";
-    const discordId = whitelist[hwid].discordId || "Unknown";
 
     // ✅ APPROVE
     if (action === 'approve') {
@@ -119,46 +105,31 @@ client.on('interactionCreate', async (interaction) => {
         const row = new ActionRowBuilder().addComponents(revokeButton);
 
         await interaction.update({
-            content:
-`✅ **Approved**
-👤 User: \`${username}\`
-💬 Discord: \`${discordId}\`
-🆔 HWID: \`${hwid}\`
-👮 By: ${interaction.user.username}`,
+            content: `✅ **Approved**\n👤 User: \`${username}\`\n🆔 HWID: \`${hwid}\`\n👮 By: ${interaction.user.username}`,
             components: [row]
         });
     }
 
-    // ❌ DENY
+    // ❌ DENY (قبل القبول)
     else if (action === 'deny') {
 
         delete whitelist[hwid];
         await saveWhitelist(whitelist);
 
         await interaction.update({
-            content:
-`❌ **Denied**
-👤 User: \`${username}\`
-💬 Discord: \`${discordId}\`
-🆔 HWID: \`${hwid}\`
-👮 By: ${interaction.user.username}`,
+            content: `❌ **Denied**\n👤 User: \`${username}\`\n🆔 HWID: \`${hwid}\`\n👮 By: ${interaction.user.username}`,
             components: []
         });
     }
 
-    // 🔥 REVOKE
+    // 🔥 REVOKE (بعد القبول)
     else if (action === 'revoke') {
 
         delete whitelist[hwid];
         await saveWhitelist(whitelist);
 
         await interaction.update({
-            content:
-`🚫 **Access Revoked**
-👤 User: \`${username}\`
-💬 Discord: \`${discordId}\`
-🆔 HWID: \`${hwid}\`
-👮 By: ${interaction.user.username}`,
+            content: `🚫 **Access Revoked**\n👤 User: \`${username}\`\n🆔 HWID: \`${hwid}\`\n👮 By: ${interaction.user.username}`,
             components: []
         });
     }
