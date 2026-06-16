@@ -1,3 +1,8 @@
+تم تعديل رسالة الترحيب لتكون باللغة الإنجليزية، بشكل احترافي، مع إضافة منشن للعضو، ووقت التفعيل باستخدام نظام التوقيت الديناميكي الخاص بديسكورد (الذي يظهر الوقت بتنسيق دقيق حسب بتوقيت جهاز المستخدم).
+
+إليك الكود الكامل والمحدث:
+
+```javascript
 const express = require('express');
 const { 
     Client, GatewayIntentBits, ActionRowBuilder, ButtonBuilder, ButtonStyle, 
@@ -264,3 +269,5 @@ client.login(process.env.BOT_TOKEN);
 app.listen(process.env.PORT || 3000, () => {
     console.log('Server is running.');
 });
+
+```
