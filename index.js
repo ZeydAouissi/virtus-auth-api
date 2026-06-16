@@ -6,6 +6,18 @@ const {
 const axios = require('axios'); 
 
 const app = express();
+
+// إعداد بروتوكول CORS الصريح لامتصاص طلبات C++ ومنع الـ 404
+app.use((req, res, next) => {
+    res.header("Access-Control-Allow-Origin", "*");
+    res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept");
+    res.header("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS");
+    if (req.method === "OPTIONS") {
+        return res.sendStatus(200);
+    }
+    next();
+});
+
 app.use(express.json());
 
 const client = new Client({ 
@@ -29,12 +41,7 @@ app.get("/api/ping", (req, res) => {
 });
 
 // ================= HARD KILL SWITCH & UPDATE API =================
-// يمكنك تغيير قيمة status إلى:
-// "active" -> البرنامج يعمل بشكل طبيعي عند الجميع.
-// "maintenance" -> البرنامج يظهر رسالة صيانة ويغلق نفسه فوراً.
-// "banned" -> البرنامج تم إيقافه تماماً كإجراء طوارئ صارم.
 app.get('/api/update', (req, res) => {
-    // إرجاع كود 200 صريح مع كتابة الكلمة المفتاحية banned بشكل واضح لمنع الـ Connection Error
     res.status(200).json({
         status: "banned", 
         latest_version: "v2.4.0-S",
@@ -63,22 +70,27 @@ async function saveWhitelist(whitelistObj) {
 
 // ================= API AUTH =================
 app.post('/api/auth', async (req, res) => { 
-    const { hwid } = req.body; 
-    
-    if (!hwid) return res.status(400).json({ error: "HWID is required" });
+    try {
+        const { hwid } = req.body; 
+        
+        if (!hwid) return res.status(400).json({ error: "HWID is required" });
 
-    let whitelist = await getWhitelist(); 
+        let whitelist = await getWhitelist(); 
 
-    if (whitelist[hwid]) {
-        if (whitelist[hwid].status === "banned") {
-            return res.status(403).json({ status: "banned", error: "This device is permanently banned." });
+        if (whitelist[hwid]) {
+            if (whitelist[hwid].status === "banned") {
+                return res.status(200).json({ status: "banned", error: "This device is permanently banned." });
+            }
+            if (whitelist[hwid].status === "approved") {
+                return res.status(200).json({ status: "approved", username: whitelist[hwid].username });
+            }
         }
-        if (whitelist[hwid].status === "approved") {
-            return res.json({ status: "approved", username: whitelist[hwid].username });
-        }
+
+        return res.status(200).json({ status: "pending/not_found" });
+    } catch (err) {
+        console.error("Auth routing error:", err);
+        return res.status(500).json({ error: "Internal Server Error" });
     }
-
-    return res.json({ status: "pending/not_found" });
 });
 
 // ================= INTERACTION HANDLER =================
@@ -101,7 +113,7 @@ client.on('interactionCreate', async (interaction) => {
     }
 
     if (interaction.isModalSubmit() && interaction.customId === 'whitelist_modal') {
-        await interaction.deferReply({ ephemeral: false });
+        await interaction.deferReply();
 
         const hwid = interaction.fields.getTextInputValue('modal_hwid');
         const discordUsername = interaction.user.username; 
@@ -246,7 +258,6 @@ client.on('ready', () => {
     console.log(`✅ تم تسجيل الدخول بنجاح كـ: ${client.user.tag}`);
 });
 
-client.on('debug', console.log);
 client.on('error', console.error);
 client.on('warn', console.warn);
 
@@ -271,5 +282,5 @@ axios.get('https://discord.com/api/v10/gateway')
     });
 
 app.listen(process.env.PORT || 3000, () => {
-    console.log('🌐 السيرفر يعمل.');
+    console.log('🌐 السيرفر يعمل بشكل صحيح واستقبال CORS مفعّل.');
 });
