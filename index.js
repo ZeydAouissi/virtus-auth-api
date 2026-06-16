@@ -33,9 +33,7 @@ async function saveWhitelist(whitelistObj) {
 app.post('/api/auth', async (req, res) => { 
     const { hwid, username } = req.body; 
     
-    if (!hwid) {
-        return res.status(400).json({ error: "HWID is required" });
-    }
+    if (!hwid) return res.status(400).json({ error: "HWID is required" });
 
     let whitelist = await getWhitelist(); 
 
@@ -52,17 +50,8 @@ app.post('/api/auth', async (req, res) => {
 
         const channel = client.channels.cache.get(process.env.DISCORD_CHANNEL_ID);
         if (channel) {
-            // Creating Clickable Buttons
-            const approveButton = new ButtonBuilder()
-                .setCustomId(`approve_${hwid}`)
-                .setLabel('Approve ✅')
-                .setStyle(ButtonStyle.Success);
-
-            const denyButton = new ButtonBuilder()
-                .setCustomId(`deny_${hwid}`)
-                .setLabel('Deny ❌')
-                .setStyle(ButtonStyle.Danger);
-
+            const approveButton = new ButtonBuilder().setCustomId(`approve_${hwid}`).setLabel('Approve ✅').setStyle(ButtonStyle.Success);
+            const denyButton = new ButtonBuilder().setCustomId(`deny_${hwid}`).setLabel('Deny ❌').setStyle(ButtonStyle.Danger);
             const row = new ActionRowBuilder().addComponents(approveButton, denyButton);
 
             await channel.send({
@@ -71,18 +60,13 @@ app.post('/api/auth', async (req, res) => {
             });
         }
     }
-    
     return res.json({ status: "pending" });
 });
 
 // Handling Button Interactions
 client.on('interactionCreate', async (interaction) => {
     if (!interaction.isButton()) return;
-    
-    // Restriction to your Discord Admin ID
-    if (interaction.user.id !== '228898892425592832') {
-        return interaction.reply({ content: "You are not authorized to use these buttons.", ephemeral: true });
-    }
+    if (interaction.user.id !== '228898892425592832') return interaction.reply({ content: "Unauthorized.", ephemeral: true });
 
     const [action, hwid] = interaction.customId.split('_');
     let whitelist = await getWhitelist();
@@ -92,35 +76,29 @@ client.on('interactionCreate', async (interaction) => {
             whitelist[hwid].status = "approved";
             await saveWhitelist(whitelist);
             
-            // Update message to show it's approved and remove buttons
-            await interaction.update({
-                content: `✅ **Approved Successfully!**\nUser: **${whitelist[hwid].username}**\nHWID: \`${hwid}\`\n*Approved by ${interaction.user.username}*`,
-                components: []
-            });
-        } else {
-            await interaction.reply({ content: "HWID data not found in Firebase.", ephemeral: true });
-        }
-    }
+            // تحديث الرسالة ليبقى زر "Revoke" دائم
+            const revokeButton = new ButtonBuilder().setCustomId(`deny_${hwid}`).setLabel('Revoke Access ❌').setStyle(ButtonStyle.Danger);
+            const row = new ActionRowBuilder().addComponents(revokeButton);
 
-    if (action === 'deny') {
+            await interaction.update({
+                content: `✅ **Approved:** ${whitelist[hwid].username}\nHWID: \`${hwid}\`\n*Approved by ${interaction.user.username}*`,
+                components: [row]
+            });
+        }
+    } else if (action === 'deny') {
         if (whitelist[hwid]) {
             delete whitelist[hwid];
             await saveWhitelist(whitelist);
-            
-            // Update message to show it's denied/removed and remove buttons
             await interaction.update({
-                content: `❌ **Request Denied & Removed!**\nHWID: \`${hwid}\`\n*Denied by ${interaction.user.username}*`,
+                content: `❌ **Access Revoked/Denied:** \`${hwid}\`\n*Processed by ${interaction.user.username}*`,
                 components: []
             });
         } else {
-            await interaction.reply({ content: "HWID data not found or already deleted.", ephemeral: true });
+            await interaction.reply({ content: "Data not found.", ephemeral: true });
         }
     }
 });
 
-client.on('ready', () => {
-    console.log(`Bot logged in as ${client.user.tag}`);
-});
-
+client.on('ready', () => console.log(`Bot logged in as ${client.user.tag}`));
 client.login(process.env.BOT_TOKEN);
-app.listen(process.env.PORT || 3000, () => console.log('Server is running with production Button-Auth logic'));
+app.listen(process.env.PORT || 3000, () => console.log('Server is running.'));
