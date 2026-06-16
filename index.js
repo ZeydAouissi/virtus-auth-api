@@ -35,10 +35,17 @@ const ADMIN_ID = process.env.ADMIN_ID || '228898892425592832';
 const TICKET_CATEGORY_ID = process.env.TICKET_CATEGORY_ID; 
 const LOG_CHANNEL_ID = process.env.LOG_CHANNEL_ID || '1516417216675844116'; 
 
-// ================= KEEP ALIVE =================
+// ================= KEEP ALIVE (PREVENT SLEEP) =================
 app.get("/api/ping", (req, res) => {
     return res.status(200).send("alive");
 });
+
+// سكربت ذكي يقوم بطلب السيرفر تلقائياً كل 5 دقائق لضمان عدم إغلاق الحاوية
+setInterval(() => {
+    axios.get('https://virtus-auth-api.up.railway.app/api/ping')
+        .then(() => console.log('🔄 Keep-Alive: Ping Sent Successfully.'))
+        .catch((err) => console.error('⚠️ Keep-Alive Failed:', err.message));
+}, 5 * 60 * 1000);
 
 // ================= HARD KILL SWITCH & UPDATE API =================
 app.get('/api/update', (req, res) => {
