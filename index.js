@@ -9,10 +9,8 @@ const client = new Client({
     intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent] 
 });
 
-// رابط الفايربيز الرئيسي الخاص بك
 const DB_URL = "https://auth-aadf4-default-rtdb.firebaseio.com/whitelist.json";
 
-// دالة جلب البيانات من الفايربيز
 async function getWhitelist() {
     try {
         const response = await axios.get(DB_URL);
@@ -23,7 +21,6 @@ async function getWhitelist() {
     }
 }
 
-// دالة حفظ البيانات في الفايربيز
 async function saveWhitelist(whitelistObj) {
     try {
         await axios.put(DB_URL, whitelistObj);
@@ -32,28 +29,34 @@ async function saveWhitelist(whitelistObj) {
     }
 }
 
-// الـ Route الخاص بفحص الـ HWID والاسم المرفوع من برنامج الـ C++
+// الـ Route المطور لمعاينة البيانات القادمة من الـ C++
 app.post('/api/auth', async (req, res) => { 
+    
+    // 👇 السطرين القادمين سيطبعان لك في شاشة Render السوداء البيانات القادمة فوراً
+    console.log("====== طلب جديد وصل للسيرفر ======");
+    console.log("البيانات المرسلة من البرنامج هي:", req.body); 
+
     const { hwid, username } = req.body; 
     
-    if (!hwid) return res.status(400).json({ error: "HWID is required" });
+    if (!hwid) {
+        console.log("❌ فشل الطلب: البرنامج لم يرسل الـ hwid أو تم إرساله بحروف كابيتال مجدداً");
+        return res.status(400).json({ error: "HWID is required" });
+    }
 
     let whitelist = await getWhitelist(); 
 
-    // 1. إذا كان الجهاز موجود مسبقاً ومفعّل، يدخل فوراً
     if (whitelist[hwid] && whitelist[hwid].status === "approved") {
         return res.json({ status: "approved" });
     }
 
-    // 2. إذا كان الجهاز غير موجود، نخزن الاسم فوراً في الفايربيز بحالة معلّقة (pending) لكي لا يضيع
     if (!whitelist[hwid]) {
         whitelist[hwid] = {
             username: username || "Unknown User",
             status: "pending"
         };
-        await saveWhitelist(whitelist); // حفظ فوري في قاعدة البيانات مع الاسم
+        await saveWhitelist(whitelist); 
+        console.log(`✅ تم حفظ الجهاز بنجاح في الفايربيز: ${hwid}`);
 
-        // إرسال رسالة التفعيل للديسكورد
         const channel = client.channels.cache.get(process.env.DISCORD_CHANNEL_ID);
         if (channel) {
             channel.send(`**New Auth Request!**\nUser: \`${username || "Unknown User"}\`\nHWID: \`${hwid}\`\nTo approve, type: \`!add ${hwid}\``);
@@ -63,7 +66,6 @@ app.post('/api/auth', async (req, res) => {
     return res.json({ status: "pending" });
 });
 
-// أوامر الديسكورد للتفعيل والحذف
 client.on('messageCreate', async (message) => { 
     if (message.author.bot || message.author.id !== '228898892425592832') return;
     if (message.channel.id !== process.env.DISCORD_CHANNEL_ID) return;
@@ -74,18 +76,15 @@ client.on('messageCreate', async (message) => {
 
         let whitelist = await getWhitelist(); 
 
-        // إذا كان الجهاز مسجلاً مسبقاً (سواء معلق أو مفعّل)
         if (whitelist[hwid]) {
             if (whitelist[hwid].status === "approved") {
                 return message.reply(`⚠️ HWID \`${hwid}\` is already approved.`);
             }
             
-            // تغيير الحالة فقط إلى approved مع الحفاظ على الاسم المخزن مسبقاً
             whitelist[hwid].status = "approved";
             await saveWhitelist(whitelist); 
             message.reply(`✅ Access granted for **${whitelist[hwid].username}** (HWID: \`${hwid}\`)`);
         } else {
-            // في حال قمت بإضافة الـ HWID يدوياً من الديسكورد دون أن يفتح المستخدم البرنامج أولاً
             whitelist[hwid] = {
                 username: "Added Directly via Discord",
                 status: "approved"
@@ -102,7 +101,7 @@ client.on('messageCreate', async (message) => {
         let whitelist = await getWhitelist(); 
 
         if (whitelist[hwid]) {
-            delete whitelist[hwid]; // حذف الجهاز بالكامل
+            delete whitelist[hwid]; 
             await saveWhitelist(whitelist); 
             message.reply(`❌ Access revoked for HWID: \`${hwid}\``);
         } else {
