@@ -9,22 +9,21 @@ const client = new Client({
     intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent] 
 });
 
-// رابط الفايربيز الرئيسي
+// رابط الفايربيز الرئيسي الخاص بك
 const DB_URL = "https://auth-aadf4-default-rtdb.firebaseio.com/whitelist.json";
-let pendingRequests = new Map(); 
 
-// دالة جلب الوايت ليست من الفايربيز كـ Object لتفادي كراشات المصفوفات
+// دالة جلب البيانات من الفايربيز
 async function getWhitelist() {
     try {
         const response = await axios.get(DB_URL);
-        return response.data || {}; // إرجاع كائن فارغ {} إذا كانت القاعدة فارغة
+        return response.data || {}; 
     } catch (error) {
         console.error("Error fetching whitelist:", error);
         return {};
     }
 }
 
-// دالة حفظ الوايت ليست في الفايربيز
+// دالة حفظ البيانات في الفايربيز
 async function saveWhitelist(whitelistObj) {
     try {
         await axios.put(DB_URL, whitelistObj);
@@ -33,31 +32,38 @@ async function saveWhitelist(whitelistObj) {
     }
 }
 
-// الـ Route الخاص بفحص الـ HWID من البرنامج
+// الـ Route الخاص بفحص الـ HWID والاسم المرفوع من برنامج الـ C++
 app.post('/api/auth', async (req, res) => { 
     const { hwid, username } = req.body; 
     
     if (!hwid) return res.status(400).json({ error: "HWID is required" });
 
-    const whitelist = await getWhitelist(); 
+    let whitelist = await getWhitelist(); 
 
-    // الفحص الجديد: يتأكد أن الجهاز موجود وحالته مفعّلة approved
+    // 1. إذا كان الجهاز موجود مسبقاً ومفعّل، يدخل فوراً
     if (whitelist[hwid] && whitelist[hwid].status === "approved") {
         return res.json({ status: "approved" });
     }
 
-    if (!pendingRequests.has(hwid)) {
-        pendingRequests.set(hwid, username || "Unknown");
+    // 2. إذا كان الجهاز غير موجود، نخزن الاسم فوراً في الفايربيز بحالة معلّقة (pending) لكي لا يضيع
+    if (!whitelist[hwid]) {
+        whitelist[hwid] = {
+            username: username || "Unknown User",
+            status: "pending"
+        };
+        await saveWhitelist(whitelist); // حفظ فوري في قاعدة البيانات مع الاسم
+
+        // إرسال رسالة التفعيل للديسكورد
         const channel = client.channels.cache.get(process.env.DISCORD_CHANNEL_ID);
         if (channel) {
-            channel.send(`**New Auth Request!**\nUser: \`${username || "Unknown"}\`\nHWID: \`${hwid}\`\nTo approve, type: \`!add ${hwid}\``);
+            channel.send(`**New Auth Request!**\nUser: \`${username || "Unknown User"}\`\nHWID: \`${hwid}\`\nTo approve, type: \`!add ${hwid}\``);
         }
     }
     
     return res.json({ status: "pending" });
 });
 
-// أوامر الديسكورد للتفعيل والإلغاء
+// أوامر الديسكورد للتفعيل والحذف
 client.on('messageCreate', async (message) => { 
     if (message.author.bot || message.author.id !== '228898892425592832') return;
     if (message.channel.id !== process.env.DISCORD_CHANNEL_ID) return;
@@ -68,21 +74,24 @@ client.on('messageCreate', async (message) => {
 
         let whitelist = await getWhitelist(); 
 
-        // جلب اسم المستخدم الذي أرسله كود الـ C++ والمخزن مؤقتاً في السيرفر
-        const savedUsername = pendingRequests.get(hwid) || "Authorized User";
-
-        if (pendingRequests.has(hwid) || !whitelist[hwid]) {
-            // حفظ الاسم والحالة بداخل الـ HWID الخاص به في الفايربيز
+        // إذا كان الجهاز مسجلاً مسبقاً (سواء معلق أو مفعّل)
+        if (whitelist[hwid]) {
+            if (whitelist[hwid].status === "approved") {
+                return message.reply(`⚠️ HWID \`${hwid}\` is already approved.`);
+            }
+            
+            // تغيير الحالة فقط إلى approved مع الحفاظ على الاسم المخزن مسبقاً
+            whitelist[hwid].status = "approved";
+            await saveWhitelist(whitelist); 
+            message.reply(`✅ Access granted for **${whitelist[hwid].username}** (HWID: \`${hwid}\`)`);
+        } else {
+            // في حال قمت بإضافة الـ HWID يدوياً من الديسكورد دون أن يفتح المستخدم البرنامج أولاً
             whitelist[hwid] = {
-                username: savedUsername,
+                username: "Added Directly via Discord",
                 status: "approved"
             };
-            
-            pendingRequests.delete(hwid);
-            await saveWhitelist(whitelist); 
-            message.reply(`✅ Access granted for **${savedUsername}** (HWID: \`${hwid}\`)`);
-        } else if (whitelist[hwid]) {
-            message.reply(`⚠️ HWID \`${hwid}\` is already approved.`);
+            await saveWhitelist(whitelist);
+            message.reply(`✅ HWID \`${hwid}\` added and approved directly.`);
         }
     }
 
@@ -93,7 +102,7 @@ client.on('messageCreate', async (message) => {
         let whitelist = await getWhitelist(); 
 
         if (whitelist[hwid]) {
-            delete whitelist[hwid]; // حذف الـ HWID ومحتوياته بذكاء من كائن الفايربيز
+            delete whitelist[hwid]; // حذف الجهاز بالكامل
             await saveWhitelist(whitelist); 
             message.reply(`❌ Access revoked for HWID: \`${hwid}\``);
         } else {
@@ -107,4 +116,4 @@ client.on('ready', () => {
 });
 
 client.login(process.env.BOT_TOKEN);
-app.listen(process.env.PORT || 3000, () => console.log('Server is up and running!'));
+app.listen(process.env.PORT || 3000, () => console.log('Server is running with Cloud-Pending logic!'));
