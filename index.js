@@ -42,11 +42,10 @@ app.get("/api/ping", (req, res) => {
 
 // سكربت ذكي يقوم بطلب السيرفر تلقائياً كل 5 دقائق لضمان عدم إغلاق الحاوية
 setInterval(() => {
-    axios.get('https://virtus-auth-api.up.railway.app/api/ping')
+    axios.get('https://virtus-auth-api-production.up.railway.app/api/ping')
         .then(() => console.log('🔄 Keep-Alive: Ping Sent Successfully.'))
         .catch((err) => console.error('⚠️ Keep-Alive Failed:', err.message));
 }, 5 * 60 * 1000);
-
 // ================= HARD KILL SWITCH & UPDATE API =================
 app.get('/api/update', (req, res) => {
     res.status(200).json({
