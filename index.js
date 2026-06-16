@@ -1,6 +1,6 @@
 const express = require('express');
 const { Client, GatewayIntentBits } = require('discord.js');
-const fs = require('fs');
+const axios = require('axios'); // تم التغيير من fs إلى axios
 
 const app = express();
 app.use(express.json());
@@ -9,21 +9,37 @@ const client = new Client({
     intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent] 
 });
 
-let whitelist = [];
+// رابط الفايربيز الخاص بك
+const DB_URL = "https://auth-aadf4-default-rtdb.firebaseio.com/whitelist.json";
 let pendingRequests = new Map(); 
 
-if (fs.existsSync('whitelist.json')) {
-    whitelist = JSON.parse(fs.readFileSync('whitelist.json'));
+// دالة جلب الوايت ليست من الفايربيز
+async function getWhitelist() {
+    try {
+        const response = await axios.get(DB_URL);
+        return response.data || []; // إذا كانت القاعدة فارغة ترجع مصفوفة فارغة
+    } catch (error) {
+        console.error("Error fetching whitelist:", error);
+        return [];
+    }
 }
 
-function saveWhitelist() {
-    fs.writeFileSync('whitelist.json', JSON.stringify(whitelist));
+// دالة حفظ الوايت ليست في الفايربيز
+async function saveWhitelist(whitelistArray) {
+    try {
+        await axios.put(DB_URL, whitelistArray);
+    } catch (error) {
+        console.error("Error saving whitelist:", error);
+    }
 }
 
-app.post('/api/auth', (req, res) => {
+// الـ Route الخاص بفحص الـ HWID من البرنامج
+app.post('/api/auth', async (req, res) => { // تم إضافة async هنا
     const { hwid, username } = req.body; 
     
     if (!hwid) return res.status(400).json({ error: "HWID is required" });
+
+    const whitelist = await getWhitelist(); // جلب البيانات المباشرة من الفايربيز
 
     if (whitelist.includes(hwid)) {
         return res.json({ status: "approved" });
@@ -40,16 +56,21 @@ app.post('/api/auth', (req, res) => {
     return res.json({ status: "pending" });
 });
 
-client.on('messageCreate', (message) => {
+// أوامر الديسكورد للتفعيل والإلغاء
+client.on('messageCreate', async (message) => { // تم إضافة async هنا
     if (message.author.bot || message.author.id !== '228898892425592832') return;
     if (message.channel.id !== process.env.DISCORD_CHANNEL_ID) return;
 
     if (message.content.startsWith('!add ')) {
         const hwid = message.content.split(' ')[1];
-        if (hwid && pendingRequests.has(hwid)) {
+        if (!hwid) return;
+
+        let whitelist = await getWhitelist(); // جلب القائمة المحدثة
+
+        if (pendingRequests.has(hwid)) {
             whitelist.push(hwid);
             pendingRequests.delete(hwid);
-            saveWhitelist();
+            await saveWhitelist(whitelist); // حفظ التحديث في الفايربيز
             message.reply(`✅ Access granted for HWID: \`${hwid}\``);
         } else if (whitelist.includes(hwid)) {
             message.reply(`⚠️ HWID \`${hwid}\` is already approved.`);
@@ -60,9 +81,13 @@ client.on('messageCreate', (message) => {
 
     if (message.content.startsWith('!remove ')) {
         const hwid = message.content.split(' ')[1];
-        if (hwid && whitelist.includes(hwid)) {
+        if (!hwid) return;
+
+        let whitelist = await getWhitelist(); // جلب القائمة المحدثة
+
+        if (whitelist.includes(hwid)) {
             whitelist = whitelist.filter(id => id !== hwid);
-            saveWhitelist();
+            await saveWhitelist(whitelist); // حفظ التحديث بعد الحذف
             message.reply(`❌ Access revoked for HWID: \`${hwid}\``);
         } else {
             message.reply(`⚠️ HWID \`${hwid}\` not found in the whitelist.`);
