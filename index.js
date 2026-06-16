@@ -6,11 +6,22 @@ const app = express();
 app.use(express.json());
 
 const client = new Client({ 
-    intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent] 
+    intents: [
+        GatewayIntentBits.Guilds,
+        GatewayIntentBits.GuildMessages,
+        GatewayIntentBits.MessageContent
+    ] 
 });
 
 const DB_URL = "https://auth-aadf4-default-rtdb.firebaseio.com/whitelist.json";
 
+// ================= KEEP ALIVE =================
+// 🔥 هذا يمنع نوم السيرفر
+app.get("/api/ping", (req, res) => {
+    return res.status(200).send("alive");
+});
+
+// ================= DB =================
 async function getWhitelist() {
     try {
         const response = await axios.get(DB_URL);
@@ -29,7 +40,7 @@ async function saveWhitelist(whitelistObj) {
     }
 }
 
-// API AUTH
+// ================= API AUTH =================
 app.post('/api/auth', async (req, res) => { 
     const { hwid, username } = req.body; 
     
@@ -74,7 +85,7 @@ app.post('/api/auth', async (req, res) => {
     return res.json({ status: "pending" });
 });
 
-// BUTTON HANDLER
+// ================= BUTTON HANDLER =================
 client.on('interactionCreate', async (interaction) => {
     if (!interaction.isButton()) return;
 
@@ -110,7 +121,7 @@ client.on('interactionCreate', async (interaction) => {
         });
     }
 
-    // ❌ DENY (قبل القبول)
+    // ❌ DENY
     else if (action === 'deny') {
 
         delete whitelist[hwid];
@@ -122,7 +133,7 @@ client.on('interactionCreate', async (interaction) => {
         });
     }
 
-    // 🔥 REVOKE (بعد القبول)
+    // 🔥 REVOKE
     else if (action === 'revoke') {
 
         delete whitelist[hwid];
@@ -141,6 +152,7 @@ client.on('ready', () => {
 
 client.login(process.env.BOT_TOKEN);
 
+// ================= SERVER =================
 app.listen(process.env.PORT || 3000, () => {
     console.log('Server is running.');
 });
