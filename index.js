@@ -47,7 +47,7 @@ async function saveWhitelist(whitelistObj) {
     }
 }
 
-// ================= API AUTH (For Your Game/App) =================
+// ================= API AUTH =================
 app.post('/api/auth', async (req, res) => { 
     const { hwid } = req.body; 
     
@@ -77,7 +77,7 @@ client.on('interactionCreate', async (interaction) => {
 
         const hwidInput = new TextInputBuilder()
             .setCustomId('modal_hwid')
-            .setLabel('Enter Your HWID / كود الجهاز')
+            .setLabel('Enter Your HWID')
             .setStyle(TextInputStyle.Short)
             .setPlaceholder('Paste your HWID here...')
             .setRequired(true);
@@ -96,7 +96,7 @@ client.on('interactionCreate', async (interaction) => {
         let whitelist = await getWhitelist();
 
         if (whitelist[hwid] && whitelist[hwid].status === "banned") {
-            await interaction.editReply({ content: "❌ **Access Denied:** This HWID is permanently banned from the system." });
+            await interaction.editReply({ content: "❌ **Access Denied:** This HWID is permanently banned." });
             setTimeout(() => interaction.deleteReply().catch(() => {}), 10000);
             return;
         }
@@ -106,7 +106,7 @@ client.on('interactionCreate', async (interaction) => {
         );
 
         if (isUserAlreadyRegistered) {
-            await interaction.editReply({ content: "❌ **Registration Failed:** Your Discord account is already linked to another approved device." });
+            await interaction.editReply({ content: "❌ **Registration Failed:** Discord account already linked." });
             setTimeout(() => interaction.deleteReply().catch(() => {}), 10000);
             return;
         }
@@ -138,11 +138,11 @@ client.on('interactionCreate', async (interaction) => {
         const row = new ActionRowBuilder().addComponents(approveButton, denyButton, banButton, closeButton);
 
         await ticketChannel.send({
-            content: `👋 Welcome <@${discordId}>,\n\n📩 **New Whitelist Request Submitted!**\n👤 **Discord Name (Auto):** \`${discordUsername}\`\n🆔 **Discord ID:** \`${discordId}\`\n🔑 **HWID:** \`${hwid}\`\n\n*The administrator will review your device details shortly.*`,
+            content: `👋 Welcome <@${discordId}>,\n\n📩 **New Request!**\n👤 \`${discordUsername}\`\n🆔 \`${discordId}\`\n🔑 \`${hwid}\``,
             components: [row]
         });
 
-        await interaction.editReply({ content: `✅ Your ticket has been opened here: <#${ticketChannel.id}>` });
+        await interaction.editReply({ content: `✅ Ticket opened: <#${ticketChannel.id}>` });
         setTimeout(() => interaction.deleteReply().catch(() => {}), 10000);
         return;
     }
@@ -151,29 +151,17 @@ client.on('interactionCreate', async (interaction) => {
         const [action, hwid] = interaction.customId.split('_');
 
         if (action === 'close') {
-            if (interaction.user.id !== ADMIN_ID) {
-                await interaction.reply({ content: "❌ Strictly restricted to administrators." });
-                setTimeout(() => interaction.deleteReply().catch(() => {}), 10000);
-                return;
-            }
-            await interaction.reply({ content: "This ticket will be deleted in 5 seconds..." });
+            if (interaction.user.id !== ADMIN_ID) return;
+            await interaction.reply({ content: "Closing in 5 seconds..." });
             setTimeout(() => interaction.channel.delete().catch(() => {}), 5000);
             return;
         }
 
         if (['approve', 'deny', 'ban', 'revoke'].includes(action)) {
-            if (interaction.user.id !== ADMIN_ID) {
-                await interaction.reply({ content: "❌ **Access Denied:** Admin privileges required." });
-                setTimeout(() => interaction.deleteReply().catch(() => {}), 10000);
-                return;
-            }
+            if (interaction.user.id !== ADMIN_ID) return;
 
             let whitelist = await getWhitelist();
-            if (!whitelist[hwid]) {
-                await interaction.reply({ content: "⚠️ User data not found in database." });
-                setTimeout(() => interaction.deleteReply().catch(() => {}), 10000);
-                return;
-            }
+            if (!whitelist[hwid]) return;
 
             const targetUser = whitelist[hwid].username;
             const targetId = whitelist[hwid].discordId;
@@ -186,51 +174,35 @@ client.on('interactionCreate', async (interaction) => {
                 const closeButton = new ButtonBuilder().setCustomId('close_ticket').setLabel('Close Ticket 🔒').setStyle(ButtonStyle.Primary);
 
                 await interaction.update({
-                    content: `✅ **Approved Successfully!**\n👤 User: \`${targetUser}\`\n🆔 HWID: \`${hwid}\`\n👮 Approved By: <@${interaction.user.id}>`,
+                    content: `✅ **Approved!**\n👤 \`${targetUser}\`\n🆔 \`${hwid}\``,
                     components: [new ActionRowBuilder().addComponents(revokeButton, closeButton)]
                 });
 
-                // إرسال الإشعار الاحترافي باللغة الإنجليزية مع التوقيت
                 const logChannel = interaction.guild.channels.cache.get(LOG_CHANNEL_ID);
                 if (logChannel) {
                     const currentUnixTime = Math.floor(Date.now() / 1000);
                     await logChannel.send({
-                        content: `✅ **Access Granted**\n👤 **User:** <@${targetId}>\n📝 **Status:** Whitelisted Successfully. Welcome to VIRTUS.\n🕒 **Activated At:** <t:${currentUnixTime}:f>`
+                        content: `✅ **Access Granted**\n👤 <@${targetId}>\n🕒 <t:${currentUnixTime}:f>`
                     });
                 }
             } 
-            
             else if (action === 'deny') {
                 delete whitelist[hwid];
                 await saveWhitelist(whitelist);
-                
                 const closeButton = new ButtonBuilder().setCustomId('close_ticket').setLabel('Close Ticket 🔒').setStyle(ButtonStyle.Primary);
-                await interaction.update({
-                    content: `❌ **Request Denied**\n👤 User: \`${targetUser}\`\n🆔 HWID: \`${hwid}\`\n👮 Denied By: <@${interaction.user.id}>`,
-                    components: [new ActionRowBuilder().addComponents(closeButton)]
-                });
+                await interaction.update({ content: `❌ **Denied**\n👤 \`${targetUser}\``, components: [new ActionRowBuilder().addComponents(closeButton)] });
             } 
-            
             else if (action === 'revoke') {
                 delete whitelist[hwid];
                 await saveWhitelist(whitelist);
-
                 const closeButton = new ButtonBuilder().setCustomId('close_ticket').setLabel('Close Ticket 🔒').setStyle(ButtonStyle.Primary);
-                await interaction.update({
-                    content: `🚫 **Access Revoked**\n👤 User: \`${targetUser}\`\n🆔 HWID: \`${hwid}\`\n👮 Revoked By: <@${interaction.user.id}>`,
-                    components: [new ActionRowBuilder().addComponents(closeButton)]
-                });
+                await interaction.update({ content: `🚫 **Revoked**\n👤 \`${targetUser}\``, components: [new ActionRowBuilder().addComponents(closeButton)] });
             } 
-            
             else if (action === 'ban') {
                 whitelist[hwid].status = "banned";
                 await saveWhitelist(whitelist);
-
                 const closeButton = new ButtonBuilder().setCustomId('close_ticket').setLabel('Close Ticket 🔒').setStyle(ButtonStyle.Primary);
-                await interaction.update({
-                    content: `🔨 **HWID Permanently Banned**\n👤 User: \`${targetUser}\`\n🆔 HWID: \`${hwid}\`\n👮 Banned By: <@${interaction.user.id}>`,
-                    components: [new ActionRowBuilder().addComponents(closeButton)]
-                });
+                await interaction.update({ content: `🔨 **Banned**\n👤 \`${targetUser}\``, components: [new ActionRowBuilder().addComponents(closeButton)] });
             }
         }
     }
@@ -247,7 +219,7 @@ client.on('messageCreate', async (message) => {
         const row = new ActionRowBuilder().addComponents(setupButton);
 
         await message.channel.send({
-            content: '📌 **Whitelist & Device Registration**\n\nClick the button below to open a ticket and automatically link your Discord profile with your device HWID.',
+            content: '📌 **Whitelist & Device Registration**\nClick below to register.',
             components: [row]
         });
         
@@ -255,12 +227,37 @@ client.on('messageCreate', async (message) => {
     }
 });
 
+// ================= DEBUG & LOGIN =================
 client.on('ready', () => {
-    console.log(`Bot logged in as ${client.user.tag}`);
+    console.log(`✅ تم تسجيل الدخول بنجاح كـ: ${client.user.tag}`);
 });
 
-client.login(process.env.BOT_TOKEN);
+// تتبع أخطاء الاتصال
+client.on('debug', console.log);
+client.on('error', console.error);
+client.on('warn', console.warn);
+
+console.log("-> جاري فحص الاتصال بشبكة ديسكورد (Discord API)...");
+
+// فحص قدرة الاستضافة (Render) على الوصول لديسكورد
+axios.get('https://discord.com/api/v10/gateway')
+    .then(res => {
+        console.log("✅ شبكة ديسكورد تعمل بشكل سليم من سيرفر Render. جاري تسجيل الدخول...");
+        
+        if (!process.env.BOT_TOKEN) {
+            console.log("❌ خطأ: BOT_TOKEN مفقود من الإعدادات!");
+        } else {
+            client.login(process.env.BOT_TOKEN).catch(err => {
+                console.error("❌ فشل تسجيل الدخول. السبب:");
+                console.error(err);
+            });
+        }
+    })
+    .catch(err => {
+        console.error("❌ خطأ حرج: سيرفر Render محظور أو غير قادر على الوصول لديسكورد!");
+        console.error(err.message);
+    });
 
 app.listen(process.env.PORT || 3000, () => {
-    console.log('Server is running.');
+    console.log('🌐 السيرفر يعمل.');
 });
