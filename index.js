@@ -8,7 +8,6 @@ const axios = require('axios');
 const app = express();
 app.use(express.json());
 
-// إعداد البوت
 const client = new Client({ 
     intents: [
         GatewayIntentBits.Guilds,
@@ -19,17 +18,17 @@ const client = new Client({
 
 const DB_URL = "https://auth-aadf4-default-rtdb.firebaseio.com/whitelist.json";
 
-// ================= الإعدادات =================
+// ================= CONFIGURATION =================
 const ADMIN_ID = process.env.ADMIN_ID || '228898892425592832'; 
 const TICKET_CATEGORY_ID = process.env.TICKET_CATEGORY_ID; 
 const LOG_CHANNEL_ID = process.env.LOG_CHANNEL_ID || '1516417216675844116'; 
 
-// ================= فحص السيرفر =================
+// ================= KEEP ALIVE =================
 app.get("/api/ping", (req, res) => {
     return res.status(200).send("alive");
 });
 
-// ================= دوال قاعدة البيانات =================
+// ================= DB FUNCTIONS =================
 async function getWhitelist() {
     try {
         const response = await axios.get(DB_URL);
@@ -48,7 +47,7 @@ async function saveWhitelist(whitelistObj) {
     }
 }
 
-// ================= API المصادقة =================
+// ================= API AUTH (For Your Game/App) =================
 app.post('/api/auth', async (req, res) => { 
     const { hwid } = req.body; 
     
@@ -68,10 +67,9 @@ app.post('/api/auth', async (req, res) => {
     return res.json({ status: "pending/not_found" });
 });
 
-// ================= التفاعل مع الأزرار =================
+// ================= INTERACTION HANDLER =================
 client.on('interactionCreate', async (interaction) => {
     
-    // زر فتح التيكيت
     if (interaction.isButton() && interaction.customId === 'create_whitelist_ticket') {
         const modal = new ModalBuilder()
             .setCustomId('whitelist_modal')
@@ -79,7 +77,7 @@ client.on('interactionCreate', async (interaction) => {
 
         const hwidInput = new TextInputBuilder()
             .setCustomId('modal_hwid')
-            .setLabel('Enter Your HWID')
+            .setLabel('Enter Your HWID / كود الجهاز')
             .setStyle(TextInputStyle.Short)
             .setPlaceholder('Paste your HWID here...')
             .setRequired(true);
@@ -88,7 +86,6 @@ client.on('interactionCreate', async (interaction) => {
         return interaction.showModal(modal);
     }
 
-    // إرسال النافذة
     if (interaction.isModalSubmit() && interaction.customId === 'whitelist_modal') {
         await interaction.deferReply({ ephemeral: false });
 
@@ -141,7 +138,7 @@ client.on('interactionCreate', async (interaction) => {
         const row = new ActionRowBuilder().addComponents(approveButton, denyButton, banButton, closeButton);
 
         await ticketChannel.send({
-            content: `👋 Welcome <@${discordId}>,\n\n📩 **New Whitelist Request Submitted!**\n👤 **Discord Name:** \`${discordUsername}\`\n🆔 **Discord ID:** \`${discordId}\`\n🔑 **HWID:** \`${hwid}\`\n\n*The administrator will review your device details shortly.*`,
+            content: `👋 Welcome <@${discordId}>,\n\n📩 **New Whitelist Request Submitted!**\n👤 **Discord Name (Auto):** \`${discordUsername}\`\n🆔 **Discord ID:** \`${discordId}\`\n🔑 **HWID:** \`${hwid}\`\n\n*The administrator will review your device details shortly.*`,
             components: [row]
         });
 
@@ -150,7 +147,6 @@ client.on('interactionCreate', async (interaction) => {
         return;
     }
 
-    // أزرار الإدارة
     if (interaction.isButton()) {
         const [action, hwid] = interaction.customId.split('_');
 
@@ -194,6 +190,7 @@ client.on('interactionCreate', async (interaction) => {
                     components: [new ActionRowBuilder().addComponents(revokeButton, closeButton)]
                 });
 
+                // إرسال الإشعار الاحترافي باللغة الإنجليزية مع التوقيت
                 const logChannel = interaction.guild.channels.cache.get(LOG_CHANNEL_ID);
                 if (logChannel) {
                     const currentUnixTime = Math.floor(Date.now() / 1000);
@@ -239,7 +236,7 @@ client.on('interactionCreate', async (interaction) => {
     }
 });
 
-// ================= أمر الإنشاء =================
+// ================= SETUP COMMAND =================
 client.on('messageCreate', async (message) => {
     if (message.content === '!setup' && message.author.id === ADMIN_ID) {
         const setupButton = new ButtonBuilder()
@@ -258,23 +255,12 @@ client.on('messageCreate', async (message) => {
     }
 });
 
-// ================= تشغيل السيرفر واكتشاف الأخطاء =================
 client.on('ready', () => {
-    console.log(`✅ Bot logged in successfully as ${client.user.tag}`);
+    console.log(`Bot logged in as ${client.user.tag}`);
 });
 
-console.log("-> Checking BOT_TOKEN...");
-if (!process.env.BOT_TOKEN) {
-    console.log("❌ ERROR: BOT_TOKEN is missing from Environment Variables!");
-} else {
-    console.log("✅ BOT_TOKEN found, attempting to connect to Discord...");
-}
-
-client.login(process.env.BOT_TOKEN).catch(err => {
-    console.error("❌ Failed to login to Discord! Reason:");
-    console.error(err);
-});
+client.login(process.env.BOT_TOKEN);
 
 app.listen(process.env.PORT || 3000, () => {
-    console.log('🌐 Server is running and listening for requests.');
+    console.log('Server is running.');
 });
