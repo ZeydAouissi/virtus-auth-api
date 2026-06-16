@@ -190,11 +190,12 @@ client.on('interactionCreate', async (interaction) => {
                     components: [new ActionRowBuilder().addComponents(revokeButton, closeButton)]
                 });
 
-                // إرسال الإشعار والمنشن إلى روم الأعضاء المقبولين بدون عرض الـ HWID
+                // إرسال الإشعار الاحترافي باللغة الإنجليزية مع التوقيت
                 const logChannel = interaction.guild.channels.cache.get(LOG_CHANNEL_ID);
                 if (logChannel) {
+                    const currentUnixTime = Math.floor(Date.now() / 1000);
                     await logChannel.send({
-                        content: `🎉 **تم التفعيل بنجاح!**\nأهلاً بك <@${targetId}> في عائلة VIRTUS. نتمنى لك تجربة ممتعة! 👑`
+                        content: `✅ **Access Granted**\n👤 **User:** <@${targetId}>\n📝 **Status:** Whitelisted Successfully. Welcome to VIRTUS.\n🕒 **Activated At:** <t:${currentUnixTime}:f>`
                     });
                 }
             } 
