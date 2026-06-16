@@ -259,8 +259,10 @@ client.on('ready', () => {
     console.log(`Bot logged in as ${client.user.tag}`);
 });
 
-client.login(process.env.BOT_TOKEN);
-
+client.login(process.env.BOT_TOKEN).catch(err => {
+    console.error("❌ فشل تسجيل الدخول للديسكورد! تأكد من التوكن أو الصلاحيات:");
+    console.error(err);
+});
 app.listen(process.env.PORT || 3000, () => {
     console.log('Server is running.');
 });
