@@ -65,7 +65,7 @@ app.post('/api/auth', async (req, res) => {
             const row = new ActionRowBuilder().addComponents(approveButton, denyButton);
 
             await channel.send({
-                content: `**New Auth Request!**\nUser: \`${username || "Unknown User"}\`\nHWID: \`${hwid}\``,
+                content: `📩 **New Auth Request!**\n👤 User: \`${username || "Unknown User"}\`\n🆔 HWID: \`${hwid}\``,
                 components: [row]
             });
         }
@@ -89,6 +89,8 @@ client.on('interactionCreate', async (interaction) => {
         return interaction.reply({ content: "Data not found.", ephemeral: true });
     }
 
+    const username = whitelist[hwid].username || "Unknown User";
+
     // ✅ APPROVE
     if (action === 'approve') {
 
@@ -103,8 +105,8 @@ client.on('interactionCreate', async (interaction) => {
         const row = new ActionRowBuilder().addComponents(revokeButton);
 
         await interaction.update({
-            content: `✅ **Approved:** ${whitelist[hwid].username}\nHWID: \`${hwid}\`\n*Approved by ${interaction.user.username}*`,
-            components: [row] // 🔥 يبقى زر الحذف فقط
+            content: `✅ **Approved**\n👤 User: \`${username}\`\n🆔 HWID: \`${hwid}\`\n👮 By: ${interaction.user.username}`,
+            components: [row]
         });
     }
 
@@ -115,7 +117,7 @@ client.on('interactionCreate', async (interaction) => {
         await saveWhitelist(whitelist);
 
         await interaction.update({
-            content: `❌ **Denied:** \`${hwid}\`\n*By ${interaction.user.username}*`,
+            content: `❌ **Denied**\n👤 User: \`${username}\`\n🆔 HWID: \`${hwid}\`\n👮 By: ${interaction.user.username}`,
             components: []
         });
     }
@@ -127,7 +129,7 @@ client.on('interactionCreate', async (interaction) => {
         await saveWhitelist(whitelist);
 
         await interaction.update({
-            content: `🚫 **Access Revoked:** \`${hwid}\`\n*By ${interaction.user.username}*`,
+            content: `🚫 **Access Revoked**\n👤 User: \`${username}\`\n🆔 HWID: \`${hwid}\`\n👮 By: ${interaction.user.username}`,
             components: []
         });
     }
