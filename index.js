@@ -28,6 +28,19 @@ app.get("/api/ping", (req, res) => {
     return res.status(200).send("alive");
 });
 
+// ================= HARD KILL SWITCH & UPDATE API =================
+// يمكنك تغيير قيمة status إلى:
+// "active" -> البرنامج يعمل بشكل طبيعي عند الجميع.
+// "maintenance" -> البرنامج يظهر رسالة صيانة ويغلق نفسه فوراً.
+// "banned" -> البرنامج تم إيقافه تماماً كإجراء طوارئ صارم.
+app.get('/api/update', (req, res) => {
+    res.json({
+        status: "active", 
+        latest_version: "v2.4.0-S",
+        download_url: "https://discord.gg/vMCAY24n"
+    });
+});
+
 // ================= DB FUNCTIONS =================
 async function getWhitelist() {
     try {
@@ -232,17 +245,15 @@ client.on('ready', () => {
     console.log(`✅ تم تسجيل الدخول بنجاح كـ: ${client.user.tag}`);
 });
 
-// تتبع أخطاء الاتصال
 client.on('debug', console.log);
 client.on('error', console.error);
 client.on('warn', console.warn);
 
 console.log("-> جاري فحص الاتصال بشبكة ديسكورد (Discord API)...");
 
-// فحص قدرة الاستضافة (Render) على الوصول لديسكورد
 axios.get('https://discord.com/api/v10/gateway')
     .then(res => {
-        console.log("✅ شبكة ديسكورد تعمل بشكل سليم من سيرفر Render. جاري تسجيل الدخول...");
+        console.log("✅ شبكة ديسكورد تعمل بشكل سليم من السيرفر. جاري تسجيل الدخول...");
         
         if (!process.env.BOT_TOKEN) {
             console.log("❌ خطأ: BOT_TOKEN مفقود من الإعدادات!");
@@ -254,7 +265,7 @@ axios.get('https://discord.com/api/v10/gateway')
         }
     })
     .catch(err => {
-        console.error("❌ خطأ حرج: سيرفر Render محظور أو غير قادر على الوصول لديسكورد!");
+        console.error("❌ خطأ حرج: السيرفر غير قادر على الوصول لديسكورد!");
         console.error(err.message);
     });
 
