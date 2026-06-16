@@ -49,7 +49,7 @@ setInterval(() => {
 // ================= HARD KILL SWITCH & UPDATE API =================
 app.get('/api/update', (req, res) => {
     res.status(200).json({
-        status: "banned", 
+        status: "approved", 
         latest_version: "v2.4.0-S",
         download_url: "https://discord.gg/vMCAY24n"
     });
