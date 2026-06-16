@@ -6,15 +6,11 @@ const app = express();
 app.use(express.json());
 
 const client = new Client({ 
-    intents: [
-        GatewayIntentBits.Guilds, 
-        GatewayIntentBits.GuildMessages, 
-        GatewayIntentBits.MessageContent
-    ] 
+    intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent] 
 });
 
 let whitelist = [];
-let pendingRequests = new Set(); // قائمة الطلبات المعلقة
+let pendingRequests = new Map(); 
 
 if (fs.existsSync('whitelist.json')) {
     whitelist = JSON.parse(fs.readFileSync('whitelist.json'));
@@ -25,7 +21,7 @@ function saveWhitelist() {
 }
 
 app.post('/api/auth', (req, res) => {
-    const { hwid } = req.body;
+    const { hwid, username } = req.body; 
     
     if (!hwid) return res.status(400).json({ error: "HWID is required" });
 
@@ -33,12 +29,11 @@ app.post('/api/auth', (req, res) => {
         return res.json({ status: "approved" });
     }
 
-    // إضافة الطلب للقائمة المعلقة إذا لم يكن موجوداً
     if (!pendingRequests.has(hwid)) {
-        pendingRequests.add(hwid);
+        pendingRequests.set(hwid, username || "Unknown");
         const channel = client.channels.cache.get(process.env.DISCORD_CHANNEL_ID);
         if (channel) {
-            channel.send(`**New Auth Request!**\nHWID: \`${hwid}\`\nTo approve, type: \`!add ${hwid}\``);
+            channel.send(`**New Auth Request!**\nUser: \`${username || "Unknown"}\`\nHWID: \`${hwid}\`\nTo approve, type: \`!add ${hwid}\``);
         }
     }
     
@@ -47,6 +42,7 @@ app.post('/api/auth', (req, res) => {
 
 client.on('messageCreate', (message) => {
     if (message.author.bot || message.author.id !== '228898892425592832') return;
+    if (message.channel.id !== process.env.DISCORD_CHANNEL_ID) return;
 
     if (message.content.startsWith('!add ')) {
         const hwid = message.content.split(' ')[1];
@@ -58,7 +54,7 @@ client.on('messageCreate', (message) => {
         } else if (whitelist.includes(hwid)) {
             message.reply(`⚠️ HWID \`${hwid}\` is already approved.`);
         } else {
-            message.reply(`❌ No pending request found for HWID: \`${hwid}\`. The user must try to login first.`);
+            message.reply(`❌ No pending request found for HWID: \`${hwid}\`.`);
         }
     }
 
@@ -74,11 +70,5 @@ client.on('messageCreate', (message) => {
     }
 });
 
-client.once('ready', () => {
-    console.log(`[INFO] Discord Bot is ready!`);
-});
-
 client.login(process.env.BOT_TOKEN);
-
-const PORT = process.env.PORT || 3000;
-app.listen(PORT);
+app.listen(process.env.PORT || 3000);
