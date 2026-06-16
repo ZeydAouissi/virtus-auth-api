@@ -1,5 +1,5 @@
 const express = require('express');
-const { Client, GatewayIntentBits } = require('discord.js');
+const { Client, GatewayIntentBits, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const axios = require('axios'); 
 
 const app = express();
@@ -29,17 +29,11 @@ async function saveWhitelist(whitelistObj) {
     }
 }
 
-// الـ Route المطور لمعاينة البيانات القادمة من الـ C++
+// Handling HWID Authentication requests from C++
 app.post('/api/auth', async (req, res) => { 
-    
-    // 👇 السطرين القادمين سيطبعان لك في شاشة Render السوداء البيانات القادمة فوراً
-    console.log("====== طلب جديد وصل للسيرفر ======");
-    console.log("البيانات المرسلة من البرنامج هي:", req.body); 
-
     const { hwid, username } = req.body; 
     
     if (!hwid) {
-        console.log("❌ فشل الطلب: البرنامج لم يرسل الـ hwid أو تم إرساله بحروف كابيتال مجدداً");
         return res.status(400).json({ error: "HWID is required" });
     }
 
@@ -55,64 +49,78 @@ app.post('/api/auth', async (req, res) => {
             status: "pending"
         };
         await saveWhitelist(whitelist); 
-        console.log(`✅ تم حفظ الجهاز بنجاح في الفايربيز: ${hwid}`);
 
         const channel = client.channels.cache.get(process.env.DISCORD_CHANNEL_ID);
         if (channel) {
-            channel.send(`**New Auth Request!**\nUser: \`${username || "Unknown User"}\`\nHWID: \`${hwid}\`\nTo approve, type: \`!add ${hwid}\``);
+            // Creating Clickable Buttons
+            const approveButton = new ButtonBuilder()
+                .setCustomId(`approve_${hwid}`)
+                .setLabel('Approve ✅')
+                .setStyle(ButtonStyle.Success);
+
+            const denyButton = new ButtonBuilder()
+                .setCustomId(`deny_${hwid}`)
+                .setLabel('Deny ❌')
+                .setStyle(ButtonStyle.Danger);
+
+            const row = new ActionRowBuilder().addComponents(approveButton, denyButton);
+
+            await channel.send({
+                content: `**New Auth Request!**\nUser: \`${username || "Unknown User"}\`\nHWID: \`${hwid}\``,
+                components: [row]
+            });
         }
     }
     
     return res.json({ status: "pending" });
 });
 
-client.on('messageCreate', async (message) => { 
-    if (message.author.bot || message.author.id !== '228898892425592832') return;
-    if (message.channel.id !== process.env.DISCORD_CHANNEL_ID) return;
+// Handling Button Interactions
+client.on('interactionCreate', async (interaction) => {
+    if (!interaction.isButton()) return;
+    
+    // Restriction to your Discord Admin ID
+    if (interaction.user.id !== '228898892425592832') {
+        return interaction.reply({ content: "You are not authorized to use these buttons.", ephemeral: true });
+    }
 
-    if (message.content.startsWith('!add ')) {
-        const hwid = message.content.split(' ')[1];
-        if (!hwid) return;
+    const [action, hwid] = interaction.customId.split('_');
+    let whitelist = await getWhitelist();
 
-        let whitelist = await getWhitelist(); 
-
+    if (action === 'approve') {
         if (whitelist[hwid]) {
-            if (whitelist[hwid].status === "approved") {
-                return message.reply(`⚠️ HWID \`${hwid}\` is already approved.`);
-            }
-            
             whitelist[hwid].status = "approved";
-            await saveWhitelist(whitelist); 
-            message.reply(`✅ Access granted for **${whitelist[hwid].username}** (HWID: \`${hwid}\`)`);
-        } else {
-            whitelist[hwid] = {
-                username: "Added Directly via Discord",
-                status: "approved"
-            };
             await saveWhitelist(whitelist);
-            message.reply(`✅ HWID \`${hwid}\` added and approved directly.`);
+            
+            // Update message to show it's approved and remove buttons
+            await interaction.update({
+                content: `✅ **Approved Successfully!**\nUser: **${whitelist[hwid].username}**\nHWID: \`${hwid}\`\n*Approved by ${interaction.user.username}*`,
+                components: []
+            });
+        } else {
+            await interaction.reply({ content: "HWID data not found in Firebase.", ephemeral: true });
         }
     }
 
-    if (message.content.startsWith('!remove ')) {
-        const hwid = message.content.split(' ')[1];
-        if (!hwid) return;
-
-        let whitelist = await getWhitelist(); 
-
+    if (action === 'deny') {
         if (whitelist[hwid]) {
-            delete whitelist[hwid]; 
-            await saveWhitelist(whitelist); 
-            message.reply(`❌ Access revoked for HWID: \`${hwid}\``);
+            delete whitelist[hwid];
+            await saveWhitelist(whitelist);
+            
+            // Update message to show it's denied/removed and remove buttons
+            await interaction.update({
+                content: `❌ **Request Denied & Removed!**\nHWID: \`${hwid}\`\n*Denied by ${interaction.user.username}*`,
+                components: []
+            });
         } else {
-            message.reply(`⚠️ HWID \`${hwid}\` not found in the whitelist.`);
+            await interaction.reply({ content: "HWID data not found or already deleted.", ephemeral: true });
         }
     }
 });
 
 client.on('ready', () => {
-    console.log(`Bot is logged in as ${client.user.tag}`);
+    console.log(`Bot logged in as ${client.user.tag}`);
 });
 
 client.login(process.env.BOT_TOKEN);
-app.listen(process.env.PORT || 3000, () => console.log('Server is running with Cloud-Pending logic!'));
+app.listen(process.env.PORT || 3000, () => console.log('Server is running with production Button-Auth logic'));
