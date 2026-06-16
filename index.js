@@ -20,7 +20,8 @@ const DB_URL = "https://auth-aadf4-default-rtdb.firebaseio.com/whitelist.json";
 
 // ================= CONFIGURATION =================
 const ADMIN_ID = process.env.ADMIN_ID || '228898892425592832'; 
-const TICKET_CATEGORY_ID = process.env.TICKET_CATEGORY_ID; // أيدي قسم التيكيتات
+const TICKET_CATEGORY_ID = process.env.TICKET_CATEGORY_ID; 
+const LOG_CHANNEL_ID = process.env.LOG_CHANNEL_ID || '1516417216675844116'; 
 
 // ================= KEEP ALIVE =================
 app.get("/api/ping", (req, res) => {
@@ -69,7 +70,6 @@ app.post('/api/auth', async (req, res) => {
 // ================= INTERACTION HANDLER =================
 client.on('interactionCreate', async (interaction) => {
     
-    // 1️⃣ عند الضغط على زر إنشاء التيكيت
     if (interaction.isButton() && interaction.customId === 'create_whitelist_ticket') {
         const modal = new ModalBuilder()
             .setCustomId('whitelist_modal')
@@ -86,9 +86,7 @@ client.on('interactionCreate', async (interaction) => {
         return interaction.showModal(modal);
     }
 
-    // 2️⃣ عند إرسال النافذة (Modal Submit)
     if (interaction.isModalSubmit() && interaction.customId === 'whitelist_modal') {
-        // تم إلغاء ephemeral لتظهر الرسالة للجميع ويتمكن البوت من حذفها تلقائياً
         await interaction.deferReply({ ephemeral: false });
 
         const hwid = interaction.fields.getTextInputValue('modal_hwid');
@@ -97,14 +95,12 @@ client.on('interactionCreate', async (interaction) => {
 
         let whitelist = await getWhitelist();
 
-        // أ. فحص إذا كان الجهاز محظوراً
         if (whitelist[hwid] && whitelist[hwid].status === "banned") {
             await interaction.editReply({ content: "❌ **Access Denied:** This HWID is permanently banned from the system." });
             setTimeout(() => interaction.deleteReply().catch(() => {}), 10000);
             return;
         }
 
-        // ب. منع حساب الديسكورد من التسجيل لجهاز آخر
         const isUserAlreadyRegistered = Object.entries(whitelist).some(
             ([existingHwid, data]) => existingHwid !== hwid && data.discordId === discordId && data.status === "approved"
         );
@@ -115,7 +111,6 @@ client.on('interactionCreate', async (interaction) => {
             return;
         }
 
-        // ج. إنشاء روم التيكيت الخاصة بالعضو
         const guild = interaction.guild;
         const ticketChannel = await guild.channels.create({
             name: `ticket-${discordUsername}`,
@@ -128,7 +123,6 @@ client.on('interactionCreate', async (interaction) => {
             ]
         });
 
-        // حفظ البيانات مؤقتاً بحالة معلق
         whitelist[hwid] = {
             username: discordUsername,
             discordId: discordId,
@@ -136,7 +130,6 @@ client.on('interactionCreate', async (interaction) => {
         };
         await saveWhitelist(whitelist);
 
-        // أزرار التحكم للإدارة داخل التيكيت مباشرة
         const approveButton = new ButtonBuilder().setCustomId(`approve_${hwid}`).setLabel('Approve ✅').setStyle(ButtonStyle.Success);
         const denyButton = new ButtonBuilder().setCustomId(`deny_${hwid}`).setLabel('Deny ❌').setStyle(ButtonStyle.Danger);
         const banButton = new ButtonBuilder().setCustomId(`ban_${hwid}`).setLabel('Ban HWID 🔨').setStyle(ButtonStyle.Secondary);
@@ -149,17 +142,14 @@ client.on('interactionCreate', async (interaction) => {
             components: [row]
         });
 
-        // الرد في الروم الرئيسية بحذفه بعد 10 ثوانٍ
         await interaction.editReply({ content: `✅ Your ticket has been opened here: <#${ticketChannel.id}>` });
         setTimeout(() => interaction.deleteReply().catch(() => {}), 10000);
         return;
     }
 
-    // 3️⃣ معالجة أزرار الإدارة والتحكم
     if (interaction.isButton()) {
         const [action, hwid] = interaction.customId.split('_');
 
-        // زر إغلاق التيكيت
         if (action === 'close') {
             if (interaction.user.id !== ADMIN_ID) {
                 await interaction.reply({ content: "❌ Strictly restricted to administrators." });
@@ -171,7 +161,6 @@ client.on('interactionCreate', async (interaction) => {
             return;
         }
 
-        // أزرار التحكم بالحساب والـ HWID
         if (['approve', 'deny', 'ban', 'revoke'].includes(action)) {
             if (interaction.user.id !== ADMIN_ID) {
                 await interaction.reply({ content: "❌ **Access Denied:** Admin privileges required." });
@@ -187,6 +176,7 @@ client.on('interactionCreate', async (interaction) => {
             }
 
             const targetUser = whitelist[hwid].username;
+            const targetId = whitelist[hwid].discordId;
 
             if (action === 'approve') {
                 whitelist[hwid].status = "approved";
@@ -199,6 +189,13 @@ client.on('interactionCreate', async (interaction) => {
                     content: `✅ **Approved Successfully!**\n👤 User: \`${targetUser}\`\n🆔 HWID: \`${hwid}\`\n👮 Approved By: <@${interaction.user.id}>`,
                     components: [new ActionRowBuilder().addComponents(revokeButton, closeButton)]
                 });
+
+                const logChannel = interaction.guild.channels.cache.get(LOG_CHANNEL_ID);
+                if (logChannel) {
+                    await logChannel.send({
+                        content: `👑 **New User Whitelisted!**\n👤 Member: <@${targetId}>\n🔑 HWID: \`${hwid}\`\n✅ النظام جاهز للاستخدام الآن.`
+                    });
+                }
             } 
             
             else if (action === 'deny') {
@@ -256,14 +253,12 @@ client.on('messageCreate', async (message) => {
     }
 });
 
-// ================= BOT READY =================
 client.on('ready', () => {
     console.log(`Bot logged in as ${client.user.tag}`);
 });
 
 client.login(process.env.BOT_TOKEN);
 
-// ================= SERVER =================
 app.listen(process.env.PORT || 3000, () => {
     console.log('Server is running.');
 });
