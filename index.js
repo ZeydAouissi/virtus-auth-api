@@ -37,7 +37,7 @@ const LOG_CHANNEL_ID = process.env.LOG_CHANNEL_ID || '1516417216675844116';
 
 // 🔴 إعدادات حماية الإصدارات (Kill Switch)
 const CURRENT_VERSION = "v2.4.0-S"; // قم بتغيير هذا الرقم عند إصدار نسخة جديدة لإيقاف القديمة
-const DOWNLOAD_URL = "https://discord.gg/vMCAY24n"; // رابط تحميل النسخة الجديدة
+const DOWNLOAD_URL = "https://discord.gg/B5Rmg9PX5Y"; // رابط تحميل النسخة الجديدة
 
 // ================= KEEP ALIVE (PREVENT SLEEP) =================
 app.get("/api/ping", (req, res) => {
