@@ -35,6 +35,10 @@ const ADMIN_ID = process.env.ADMIN_ID || '228898892425592832';
 const TICKET_CATEGORY_ID = process.env.TICKET_CATEGORY_ID; 
 const LOG_CHANNEL_ID = process.env.LOG_CHANNEL_ID || '1516417216675844116'; 
 
+// 🔴 إعدادات حماية الإصدارات (Kill Switch)
+const CURRENT_VERSION = "v2.4.0-S"; // قم بتغيير هذا الرقم عند إصدار نسخة جديدة لإيقاف القديمة
+const DOWNLOAD_URL = "https://discord.gg/vMCAY24n"; // رابط تحميل النسخة الجديدة
+
 // ================= KEEP ALIVE (PREVENT SLEEP) =================
 app.get("/api/ping", (req, res) => {
     return res.status(200).send("alive");
@@ -46,12 +50,13 @@ setInterval(() => {
         .then(() => console.log('🔄 Keep-Alive: Ping Sent Successfully.'))
         .catch((err) => console.error('⚠️ Keep-Alive Failed:', err.message));
 }, 5 * 60 * 1000);
+
 // ================= HARD KILL SWITCH & UPDATE API =================
 app.get('/api/update', (req, res) => {
     res.status(200).json({
         status: "approved", 
-        latest_version: "v2.4.0-S",
-        download_url: "https://discord.gg/vMCAY24n"
+        latest_version: CURRENT_VERSION,
+        download_url: DOWNLOAD_URL
     });
 });
 
@@ -77,9 +82,19 @@ async function saveWhitelist(whitelistObj) {
 // ================= API AUTH =================
 app.post('/api/auth', async (req, res) => { 
     try {
-        const { hwid } = req.body; 
+        const { hwid, version } = req.body; 
         
         if (!hwid) return res.status(400).json({ error: "HWID is required" });
+
+        // 🔴 التحقق من أن المستخدم يمتلك أحدث نسخة
+        if (!version || version !== CURRENT_VERSION) {
+            return res.status(200).json({ 
+                status: "outdated", 
+                error: "This version is outdated. Please download the new version.",
+                latest_version: CURRENT_VERSION,
+                download_url: DOWNLOAD_URL
+            });
+        }
 
         let whitelist = await getWhitelist(); 
 
@@ -288,5 +303,5 @@ axios.get('https://discord.com/api/v10/gateway')
     });
 
 app.listen(process.env.PORT || 3000, () => {
-    console.log('🌐 السيرفر يعمل بشكل صحيح واستقبال CORS مفعّل.');
+    console.log(`🌐 السيرفر يعمل بشكل صحيح والإصدار المطلوب حالياً هو: ${CURRENT_VERSION}`);
 });
