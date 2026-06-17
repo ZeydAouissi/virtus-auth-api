@@ -1,7 +1,8 @@
 const express = require('express');
 const { 
     Client, GatewayIntentBits, ActionRowBuilder, ButtonBuilder, ButtonStyle, 
-    ChannelType, PermissionFlagsBits, ModalBuilder, TextInputBuilder, TextInputStyle 
+    ChannelType, PermissionFlagsBits, ModalBuilder, TextInputBuilder, TextInputStyle,
+    StringSelectMenuBuilder
 } = require('discord.js');
 const axios = require('axios'); 
 
@@ -102,7 +103,15 @@ app.post('/api/auth', async (req, res) => {
             if (whitelist[hwid].status === "banned") {
                 return res.status(200).json({ status: "banned", error: "This device is permanently banned." });
             }
+
             if (whitelist[hwid].status === "approved") {
+                // التحقق من الوقت إذا كان لديه وقت انتهاء
+                if (whitelist[hwid].expiresAt && Date.now() > whitelist[hwid].expiresAt) {
+                    whitelist[hwid].status = "expired";
+                    await saveWhitelist(whitelist);
+                    return res.status(200).json({ status: "expired", error: "Your subscription has expired. Please renew." });
+                }
+                
                 return res.status(200).json({ status: "approved", username: whitelist[hwid].username });
             }
         }
@@ -177,16 +186,29 @@ client.on('interactionCreate', async (interaction) => {
         };
         await saveWhitelist(whitelist);
 
-        const approveButton = new ButtonBuilder().setCustomId(`approve_${hwid}`).setLabel('Approve ✅').setStyle(ButtonStyle.Success);
+        // إنشاء قائمة اختيار الوقت (الكومبو)
+        const timeSelect = new StringSelectMenuBuilder()
+            .setCustomId(`approve_time_${hwid}`)
+            .setPlaceholder('✅ Approve & Select Duration')
+            .addOptions([
+                { label: '1 Hour', description: 'Approve for 1 Hour', value: '1h' },
+                { label: '24 Hours', description: 'Approve for 24 Hours', value: '24h' },
+                { label: '1 Week', description: 'Approve for 7 Days', value: '1w' },
+                { label: '1 Month', description: 'Approve for 30 Days', value: '1m' },
+                { label: 'Lifetime', description: 'Permanent Access', value: 'lifetime' }
+            ]);
+
+        // أزرار الرفض والبان والإغلاق
         const denyButton = new ButtonBuilder().setCustomId(`deny_${hwid}`).setLabel('Deny ❌').setStyle(ButtonStyle.Danger);
         const banButton = new ButtonBuilder().setCustomId(`ban_${hwid}`).setLabel('Ban HWID 🔨').setStyle(ButtonStyle.Secondary);
         const closeButton = new ButtonBuilder().setCustomId('close_ticket').setLabel('Close Ticket 🔒').setStyle(ButtonStyle.Primary);
 
-        const row = new ActionRowBuilder().addComponents(approveButton, denyButton, banButton, closeButton);
+        const selectRow = new ActionRowBuilder().addComponents(timeSelect);
+        const buttonsRow = new ActionRowBuilder().addComponents(denyButton, banButton, closeButton);
 
         await ticketChannel.send({
-            content: `👋 Welcome <@${discordId}>,\n\n📩 **New Request!**\n👤 \`${discordUsername}\`\n🆔 \`${discordId}\`\n🔑 \`${hwid}\``,
-            components: [row]
+            content: `👋 Welcome <@${discordId}>,\n\n📩 **New Request!**\n👤 \`${discordUsername}\`\n🆔 \`${discordId}\`\n🔑 \`${hwid}\`\n\n⚠️ **Admins:** Please select approval duration from the menu below.`,
+            components: [selectRow, buttonsRow]
         });
 
         await interaction.editReply({ content: `✅ Ticket opened: <#${ticketChannel.id}>` });
@@ -194,6 +216,56 @@ client.on('interactionCreate', async (interaction) => {
         return;
     }
 
+    // ================= HANDLER FOR SELECT MENU (APPROVAL COMBO) =================
+    if (interaction.isStringSelectMenu() && interaction.customId.startsWith('approve_time_')) {
+        if (interaction.user.id !== ADMIN_ID) {
+            return interaction.reply({ content: '❌ You do not have permission to do this.', ephemeral: true });
+        }
+
+        const hwid = interaction.customId.replace('approve_time_', '');
+        const duration = interaction.values[0];
+
+        let whitelist = await getWhitelist();
+        if (!whitelist[hwid]) return interaction.reply({ content: '❌ HWID not found.', ephemeral: true });
+
+        const targetUser = whitelist[hwid].username;
+        const targetId = whitelist[hwid].discordId;
+
+        // حساب وقت الانتهاء بناءً على الاختيار
+        let expiresAt = null;
+        const now = Date.now();
+        let durationText = "Lifetime";
+
+        if (duration === '1h') { expiresAt = now + (3600 * 1000); durationText = "1 Hour"; }
+        else if (duration === '24h') { expiresAt = now + (24 * 3600 * 1000); durationText = "24 Hours"; }
+        else if (duration === '1w') { expiresAt = now + (7 * 24 * 3600 * 1000); durationText = "1 Week"; }
+        else if (duration === '1m') { expiresAt = now + (30 * 24 * 3600 * 1000); durationText = "1 Month"; }
+
+        // تحديث قاعدة البيانات
+        whitelist[hwid].status = "approved";
+        whitelist[hwid].expiresAt = expiresAt; 
+        await saveWhitelist(whitelist);
+
+        const revokeButton = new ButtonBuilder().setCustomId(`revoke_${hwid}`).setLabel('Revoke Access ❌').setStyle(ButtonStyle.Danger);
+        const closeButton = new ButtonBuilder().setCustomId('close_ticket').setLabel('Close Ticket 🔒').setStyle(ButtonStyle.Primary);
+
+        await interaction.update({
+            content: `✅ **Approved!**\n👤 \`${targetUser}\`\n🆔 \`${hwid}\`\n⏳ **Duration:** ${durationText}`,
+            components: [new ActionRowBuilder().addComponents(revokeButton, closeButton)]
+        });
+
+        // إرسال سجل التفعيل
+        const logChannel = interaction.guild.channels.cache.get(LOG_CHANNEL_ID);
+        if (logChannel) {
+            const currentUnixTime = Math.floor(now / 1000);
+            await logChannel.send({
+                content: `✅ **Access Granted**\n👤 <@${targetId}>\n⏳ **Duration:** ${durationText}\n🕒 <t:${currentUnixTime}:f>`
+            });
+        }
+        return;
+    }
+
+    // ================= HANDLER FOR BUTTONS (DENY, BAN, REVOKE, CLOSE) =================
     if (interaction.isButton()) {
         const [action, hwid] = interaction.customId.split('_');
 
@@ -204,36 +276,15 @@ client.on('interactionCreate', async (interaction) => {
             return;
         }
 
-        if (['approve', 'deny', 'ban', 'revoke'].includes(action)) {
+        if (['deny', 'ban', 'revoke'].includes(action)) {
             if (interaction.user.id !== ADMIN_ID) return;
 
             let whitelist = await getWhitelist();
             if (!whitelist[hwid]) return;
 
             const targetUser = whitelist[hwid].username;
-            const targetId = whitelist[hwid].discordId;
 
-            if (action === 'approve') {
-                whitelist[hwid].status = "approved";
-                await saveWhitelist(whitelist);
-
-                const revokeButton = new ButtonBuilder().setCustomId(`revoke_${hwid}`).setLabel('Revoke Access ❌').setStyle(ButtonStyle.Danger);
-                const closeButton = new ButtonBuilder().setCustomId('close_ticket').setLabel('Close Ticket 🔒').setStyle(ButtonStyle.Primary);
-
-                await interaction.update({
-                    content: `✅ **Approved!**\n👤 \`${targetUser}\`\n🆔 \`${hwid}\``,
-                    components: [new ActionRowBuilder().addComponents(revokeButton, closeButton)]
-                });
-
-                const logChannel = interaction.guild.channels.cache.get(LOG_CHANNEL_ID);
-                if (logChannel) {
-                    const currentUnixTime = Math.floor(Date.now() / 1000);
-                    await logChannel.send({
-                        content: `✅ **Access Granted**\n👤 <@${targetId}>\n🕒 <t:${currentUnixTime}:f>`
-                    });
-                }
-            } 
-            else if (action === 'deny') {
+            if (action === 'deny') {
                 delete whitelist[hwid];
                 await saveWhitelist(whitelist);
                 const closeButton = new ButtonBuilder().setCustomId('close_ticket').setLabel('Close Ticket 🔒').setStyle(ButtonStyle.Primary);
